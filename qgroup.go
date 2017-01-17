@@ -47,7 +47,7 @@ func (g *QGroup) Do(key string, f Func) error {
 	g.mu.Lock()
 	if _, ok := g.q[key]; !ok {
 		g.q[key] = make(chan *Func, g.maxQueue)
-		go g.doCall(key) //Calling funcs from queue
+		go g.loopCall(key) //Calling funcs from queue
 	}
 	g.mu.Unlock()
 
@@ -61,14 +61,31 @@ func (g *QGroup) Cancel() error {
 	return nil
 }
 
-func (g *QGroup) doCall(key string) {
+func (g *QGroup) loopCall(key string) {
 	for {
 		select {
 		case fn := <-g.q[key]:
-			f := *fn
-			f()
+			g.doCall(fn)
 		case <-g.ctx.Done():
 			return
 		}
+	}
+}
+
+func (g *QGroup) doCall(fn *Func) {
+	f := *fn
+	c := make(chan struct{}, 1)
+	go func() {
+		f()
+		c <- struct{}{}
+	}()
+	if g.timeout > 0 {
+		ctx, _ := context.WithTimeout(g.ctx, g.timeout)
+		select {
+		case <-ctx.Done():
+		case <-c:
+		}
+	} else {
+		<-c
 	}
 }

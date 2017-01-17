@@ -33,5 +33,47 @@ func Test_QGroupCalls(t *testing.T) {
 			t.Errorf("calling is not lineration (%v != %v)", index, result)
 		}
 	}
+}
 
+func Test_QGroupMultiCalls(t *testing.T) {
+	var wg sync.WaitGroup
+	var tests = []struct {
+		dest map[string][]string
+		src  map[string][]string
+	}{
+		{
+			dest: make(map[string][]string),
+			src:  map[string][]string{"test": {"1", "2"}},
+		},
+		{
+			dest: make(map[string][]string),
+			src:  map[string][]string{"test": {"1", "2"}, "test2": {"3", "4"}},
+		},
+	}
+
+	for i, test := range tests {
+		g := NewGroup(WithMaxQueue(10))
+		for k, xs := range test.src {
+			_k := k
+			wg.Add(len(xs))
+			test.dest[k] = make([]string, len(xs))
+			for index, x := range xs {
+				_index := index
+				_x := x
+				g.Do(k, func() error {
+					test.dest[_k][_index] = _x
+					wg.Done()
+					return nil
+				})
+			}
+		}
+		wg.Wait()
+		for k, xs := range test.src {
+			for j, x := range xs {
+				if test.dest[k][j] != x {
+					t.Errorf("%v. %v mismatched: want=%v have=%v", i+1, k, test.src[k], test.dest[k])
+				}
+			}
+		}
+	}
 }
