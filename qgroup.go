@@ -62,9 +62,13 @@ func (g *QGroup) Cancel() error {
 }
 
 func (g *QGroup) loopCall(key string) {
+	g.mu.Lock()
+	q := g.q[key]
+	g.mu.Unlock()
+
 	for {
 		select {
-		case fn := <-g.q[key]:
+		case fn := <-q:
 			g.doCall(fn)
 		case <-g.ctx.Done():
 			return
