@@ -37,6 +37,7 @@ func Test_QGroupCalls(t *testing.T) {
 
 func Test_QGroupMultiCalls(t *testing.T) {
 	var wg sync.WaitGroup
+	var mu sync.Mutex
 	var tests = []struct {
 		dest map[string][]string
 		src  map[string][]string
@@ -56,12 +57,16 @@ func Test_QGroupMultiCalls(t *testing.T) {
 		for k, xs := range test.src {
 			_k := k
 			wg.Add(len(xs))
+			mu.Lock()
 			test.dest[k] = make([]string, len(xs))
+			mu.Unlock()
 			for index, x := range xs {
 				_index := index
 				_x := x
 				g.Do(k, func() error {
+					mu.Lock()
 					test.dest[_k][_index] = _x
+					mu.Unlock()
 					wg.Done()
 					return nil
 				})
