@@ -7,7 +7,7 @@ import (
 	"golang.org/x/net/context"
 )
 
-type Func func() error
+type Func func(context.Context)
 
 type QGroup struct {
 	ctx        context.Context
@@ -15,7 +15,7 @@ type QGroup struct {
 	maxQueue   int
 	timeout    time.Duration
 	mu         sync.Mutex
-	q          map[string]chan *Func
+	q          map[string]chan Func
 }
 
 type QGroupOption func(g *QGroup)
@@ -35,7 +35,7 @@ func WithMaxQueue(maxQueue int) QGroupOption {
 func NewGroup(opts ...QGroupOption) *QGroup {
 	g := &QGroup{} //Default QGroup
 	g.ctx, g.cancelFunc = context.WithCancel(context.Background())
-	g.q = make(map[string]chan *Func)
+	g.q = make(map[string]chan Func)
 
 	for _, o := range opts {
 		o(g)
@@ -46,12 +46,12 @@ func NewGroup(opts ...QGroupOption) *QGroup {
 func (g *QGroup) Do(key string, f Func) error {
 	g.mu.Lock()
 	if _, ok := g.q[key]; !ok {
-		g.q[key] = make(chan *Func, g.maxQueue)
+		g.q[key] = make(chan Func, g.maxQueue)
 		go g.loopCall(key) //Calling funcs from queue
 	}
 	g.mu.Unlock()
 
-	g.q[key] <- &f
+	g.q[key] <- f
 
 	return nil
 }
@@ -76,20 +76,21 @@ func (g *QGroup) loopCall(key string) {
 	}
 }
 
-func (g *QGroup) doCall(fn *Func) {
-	f := *fn
+func (g *QGroup) doCall(fn Func) {
+	var ctx context.Context
+
+	if g.timeout > 0 {
+		ctx, _ = context.WithTimeout(g.ctx, g.timeout)
+	} else {
+		ctx = context.Background()
+	}
+
 	c := make(chan struct{}, 1)
+
 	go func() {
-		f()
+		fn(ctx)
 		c <- struct{}{}
 	}()
-	if g.timeout > 0 {
-		ctx, _ := context.WithTimeout(g.ctx, g.timeout)
-		select {
-		case <-ctx.Done():
-		case <-c:
-		}
-	} else {
-		<-c
-	}
+
+	<-c
 }

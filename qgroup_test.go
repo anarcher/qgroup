@@ -3,6 +3,9 @@ package qgroup
 import (
 	"sync"
 	"testing"
+	"time"
+
+	"golang.org/x/net/context"
 )
 
 func Test_QGroupCalls(t *testing.T) {
@@ -15,11 +18,10 @@ func Test_QGroupCalls(t *testing.T) {
 	index = []int{3, 1}
 	result = make([]int, len(index))
 
-	fn := func() error {
+	fn := func(ctx context.Context) {
 		result[cnt] = index[cnt]
 		cnt++
 		wg.Done()
-		return nil
 	}
 
 	g := NewGroup(WithMaxQueue(10))
@@ -57,18 +59,16 @@ func Test_QGroupMultiCalls(t *testing.T) {
 		for k, xs := range test.src {
 			_k := k
 			wg.Add(len(xs))
-			mu.Lock()
 			test.dest[k] = make([]string, len(xs))
-			mu.Unlock()
 			for index, x := range xs {
 				_index := index
 				_x := x
-				g.Do(k, func() error {
+				g.Do(k, func(ctx context.Context) {
 					mu.Lock()
 					test.dest[_k][_index] = _x
 					mu.Unlock()
+
 					wg.Done()
-					return nil
 				})
 			}
 		}
@@ -81,4 +81,19 @@ func Test_QGroupMultiCalls(t *testing.T) {
 			}
 		}
 	}
+}
+
+func Test_QGroupCallWithTimeout(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+	fn := func(ctx context.Context) {
+		<-ctx.Done()
+		wg.Done()
+	}
+
+	g := NewGroup(WithTimeout(100 * time.Millisecond))
+	g.Do("test", fn)
+	g.Do("test", fn)
+	wg.Wait()
+
 }
