@@ -14,7 +14,7 @@ type Func struct {
 	ctx context.Context
 }
 
-//QGroup represents  function calling queues and settings
+// QGroup represents function calling queues and settings
 type QGroup struct {
 	ctx        context.Context
 	cancelFunc context.CancelFunc
@@ -24,20 +24,24 @@ type QGroup struct {
 	q          map[string]chan *Func
 }
 
+// A QGroupOption is a functional option type for QGroup
 type QGroupOption func(g *QGroup)
 
+// WithTimeout configures function call timeout. if a function reaches the timeout, ctx in the function returns a channel.
 func WithTimeout(d time.Duration) QGroupOption {
 	return func(g *QGroup) {
 		g.timeout = d
 	}
 }
 
+// WithMaxQueue configures max number of queue items. Default is 0.
 func WithMaxQueue(maxQueue int) QGroupOption {
 	return func(g *QGroup) {
 		g.maxQueue = maxQueue
 	}
 }
 
+// NewGroup returnes QGroup struct is configured with QGroupOptions
 func NewGroup(opts ...QGroupOption) *QGroup {
 	g := &QGroup{} //Default QGroup
 	g.ctx, g.cancelFunc = context.WithCancel(context.Background())
@@ -49,6 +53,8 @@ func NewGroup(opts ...QGroupOption) *QGroup {
 	return g
 }
 
+// Do enqueues the given function in a queue with key name
+// If a queue of the key  doesn't exists,Do makes a new queue with key name
 func (g *QGroup) Do(key string, fn func(context.Context)) error {
 	g.startLoopCall(key)
 	g.q[key] <- &Func{fn: fn}
@@ -56,6 +62,7 @@ func (g *QGroup) Do(key string, fn func(context.Context)) error {
 	return nil
 }
 
+// DoWithContext the given function and the given ctx in q queue with key name
 func (g *QGroup) DoWithContext(key string, ctx context.Context, fn func(context.Context)) error {
 	g.startLoopCall(key)
 	g.q[key] <- &Func{fn, ctx}
@@ -63,6 +70,7 @@ func (g *QGroup) DoWithContext(key string, ctx context.Context, fn func(context.
 	return nil
 }
 
+// Cancel can cancel all queue calling tasks
 func (g *QGroup) Cancel() error {
 	g.cancelFunc()
 	return nil
